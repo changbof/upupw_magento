@@ -1,0 +1,55 @@
+<!--@subject 欢迎加入 {{var store.getFrontendName()}} ， {{var customer.name}} ！ @-->
+<!--@vars
+{"store url=\"\"":"Store Url",
+"var logo_url":"Email Logo Image Url",
+"var logo_alt":"Email Logo Image Alt",
+"htmlescape var=$customer.name":"Customer Name",
+"store url=\"customer/account/\"":"Customer Account Url"}
+@-->
+
+<!--@styles
+body,td { color:#2f2f2f; font:11px/1.35em Verdana, Arial, Helvetica, sans-serif; }
+@-->
+
+<div style="font:11px/1.35em Verdana, Arial, Helvetica, sans-serif;">
+    <table cellspacing="0" cellpadding="0" border="0" width="98%" style="margin-top:10px; font:11px/1.35em Verdana, Arial, Helvetica, sans-serif; margin-bottom:10px;">
+        <tr>
+            <td align="center" valign="top">
+                <!-- [ header starts here] -->
+                <table cellspacing="0" cellpadding="0" border="0" width="650">
+                    <tr>
+                        <td valign="top">
+                            <a href="{{store url=""}}"><img src="{{skin url="images/logo.png" _area='frontend'}}" alt="{{var logo_alt}}"  style="margin-bottom:10px;" border="0"/></a></td>
+                    </tr>
+                </table>
+
+                <!-- [ middle starts here] -->
+                <table cellspacing="0" cellpadding="0" border="0" width="650">
+                    <tr>
+                        <td valign="top">
+                            <p><strong>您好，{{htmlescape var=$customer.name}}</strong>,<br/>
+                                欢迎光临 <a href="{{store url=""}}" style="color:#1E7EC8;">{{var store.getFrontendName()}}</a>。登入请点选每页页首的 <a href="{{store url="customer/account/"}}" style="color:#1E7EC8;">登入</a>或<a href="{{store url="customer/account/"}}" style="color:#1E7EC8;">我的账号</a>，并输入电子信箱和密码。</p>
+
+                            <p>登入网站后，您可以：</p>
+
+                            <ul>
+                                <li>购物时结账更迅速</li>
+                                <li>查看订单状态</li>
+                                <li>查看历史订单</li>
+                                <li>编辑帐户信息</li>
+                                <li>编辑密码</li>
+                                <li>保存多个地址(购物送给亲戚朋友！)</li>
+                            </ul>
+
+                            <p>有关账号或购物的任何疑问，请发信给  <a href="mailto:{{config path='trans_email/ident_support/email'}}" style="color:#1E7EC8;">{{config path='trans_email/ident_support/email'}}</a> 或拨打电话 {{config path='general/store_information/phone'}}。</p>
+                            <p>多谢惠顾！</p>
+
+
+                        </td>
+                    </tr>
+                </table>
+
+            </td>
+        </tr>
+    </table>
+</div>

@@ -1,0 +1,19 @@
+UPUPW MAGENTO PHP套件使用教程：
+
+UPUPW默认已集成MAGENTO 1.8(ce)简体中文/繁体中文/英文版，后台可自由切换语言，默认放置于htdocs目录，如需其他版本可清空htdocs目录下所有文件放置你想要的版本。
+
+在此特别感谢UPUPW 的主创人员资深的英文学者Ken经过4个昼夜的时间为我们在原Magento1.8英文版的基础上翻译制作了简体中文和繁体中文语言包，填补了目前网络上magento1.8简体中文包缺失的空白。
+
+一句话概括： 
+解压upupw_magento文件夹到任意不含空格的非中文路径下-打开UPUPW面板s1-浏览器输入127.0.0.1即可访问htdocs目录下的MAGENTO 1.8网站。 
+
+以上那句话不能解决问题请看具体教程:http://php.upupw.net/read-471
+
+phpmyadmin数据库管理页面http://127.0.0.1/pmd   或者直接upupw面板7进入
+
+更多说明文档请访问：
+http://www.upupw.net/apachehelp
+http://php.upupw.net/thread-25
+
+UPUPW PHP1 QQ群 246550622（已满） 
+UPUPW PHP2 QQ群 309864708 

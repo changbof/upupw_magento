@@ -1,0 +1,10 @@
+UPUPW MAGENTO PHP套件
+
+MariaDB数据库:
+------------------------------------------------------------------------
+
+超级管理员      用户名：magento_root      密码：RGAHppUc4359rPTQ
+
+修改数据库超级管理员密码方法：http://php.upupw.net/read-449
+创建数据库方法：http://php.upupw.net/read-450
+创建数据库用户方法：http://php.upupw.net/read-451

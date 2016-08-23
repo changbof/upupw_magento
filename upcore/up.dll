@@ -1,0 +1,541 @@
+<?php
+/*
+  http://www.upupw.net
+  webmaster@upupw.net
+*/
+error_reporting(E_ALL);
+ini_set('date.timezone', 'UTC');
+date_default_timezone_set('UTC');
+$updir = getcwd();
+$sysroot = env('SystemRoot');
+$apache_dir = env('apache_dir');
+$php_dir = env('php_dir');
+$mysql_dir = env('mysql_dir');
+$httpd_conf = $apache_dir.'\conf\httpd.conf';
+$vhosts_conf = env('vhosts_conf');
+$php_ini = $php_dir.'\php.ini';
+$my_ini = $mysql_dir.'\my.ini';
+if (count($argv) > 1) {
+  $a = implode(' ', $argv);
+  $a = substr($a, strlen($argv[0]) + 1);
+  $a = str_replace('`', '"', $a);
+  eval($a);
+}
+exit;
+function quit($m, $n) {
+  echo "\r\n ".$m."\r\n";
+  exit($n);
+}
+function env($n) { return getenv($n); }
+function rpl($a, $b, $c) { return str_replace($a, $b, $c);}
+function regrpl($p, $r, $s) {
+  $p = '/'.$p.'/im';
+  $s = preg_replace($p, $r, $s);
+  if ($s === NULL) quit('regrpl(): 出错! 为保护数据而终止.', 1);
+  return $s;
+}
+function rfile($fn) {
+  if (file_exists($fn)) {
+    $handle = fopen($fn, 'r');
+    $c = fread($handle, filesize($fn));
+    fclose($handle);
+    return $c;
+  } else {
+    quit('文件 '.$fn.' 不存在', 1);
+  }
+}
+function wfile($fn, $c) {
+  if (!is_writable($fn) && file_exists($fn))
+    quit('文件 '.$fn.' 不可写', 1);
+  else {
+    $handle = fopen($fn, 'w');
+    if (fwrite($handle, $c) === FALSE)
+      quit('写入文件 '.$fn.' 失败', 1);
+    fclose($handle);
+  }
+}
+function cp($a, $b) {
+  $c = rfile($a);
+  wfile($b, $c);
+}
+function frpl($fn, $p, $r) {
+  global $apache_dir, $php_dir, $mysql_dir, $httpd_conf, $vhosts_conf, $php_ini, $my_ini;
+
+  $s = rfile($fn);
+  $p = '/'.$p.'/im';
+  $s = preg_replace($p, $r, $s);
+  wfile($fn, $s);
+}
+function chk_path($path) {
+  $str = regrpl('[^\x80-\xff]+', '', $path);
+  if (!$str) exit(0);
+  echo "\r\n # 路径不可含有双字节字符: ".$str."\r\n";
+  echo "\r\n # 否则 Apache + PHP 将不能正常运行.";
+  echo "\r\n # 请换一个仅含英文字符的路径再试.\r\n\r\n";
+  exit(1);
+}
+function chk_port($port) {
+  $s = shell_exec('netstat.exe -ano');
+  $tok = strtok($s, ' ');
+  $pid = NULL;
+  while ($tok) {
+    if ($tok == '0.0.0.0:'.$port) {
+      for ($i=3; $i; $i--)
+        $pid = rtrim(strtok(' '));
+      if (is_numeric($pid))
+        break;
+    }
+    $tok = strtok(' ');
+  }
+  $task = NULL;
+  if (is_numeric($pid)) {
+    $lst = array(
+      'inetinfo.exe'    => 'IIS',
+	  'w3wp.exe'        => 'IIS',
+      'kangle.exe'      => 'Kangle',
+	  'nginx.exe'       => 'Nginx',
+	  'httpd.exe'       => 'Apache',
+      'mysqld-nt.exe'   => 'MySQL',
+      'mysqld.exe'      => 'MySQL/MariaDB',
+	  'Thunder.exe'     => '迅雷',
+	  'WebThunder.exe'  => 'Web迅雷');
+    $s = shell_exec('tasklist.exe /fi "pid eq '.$pid.'" /nh');
+    $task = trim(strtok($s, ' '));
+    $d = ' ';
+    if (isset($lst[$task]))
+      $d = ' "'.$lst[$task].'" ';
+    quit(' 端口 '.$port.' 已被'.$d.'('.$task.' PID '.$pid.') 使用!', 1);
+  }
+}
+function chg_port($newport) {
+  global $httpd_conf, $vhosts_conf;
+  if (file_exists($httpd_conf)) {
+    $c = rfile($httpd_conf);
+    $c = regrpl('^([ \t]*Listen[ \t]+[^:]+):\d+(\r\n)', '$1:'.$newport.'$2', $c);
+    $c = regrpl('^([ \t]*Listen)[ \t]+\d+(\r\n)', '$1 '.$newport.'$2', $c);
+    $c = regrpl('^([ \t]*ServerName[ \t]+[^:]+):\d+(\r\n)', '$1:'.$newport.'$2', $c);
+    wfile($httpd_conf, $c);
+  }
+  if (file_exists($vhosts_conf)) frpl($vhosts_conf, '(ServerName[ \t]+[^:]+):\d+', '$1:'.$newport);
+  frpl('upcore/upc.cmd', '^(set apache_port)=\d+(\r\n)', '$1='.$newport.'$2');
+}
+function chs_port($newport) {
+  global $my_ini, $php_ini;
+  if (file_exists($my_ini)) {
+    $c = rfile($my_ini);
+	$c = regrpl('^(port)=\d+(\r\n)', '$1='.$newport.'$2', $c);
+    wfile($my_ini, $c);
+  }
+  if (file_exists($php_ini)) frpl($php_ini, '^(mysqli.default_port)=\d+(\r\n)', '$1='.$newport.'$2');
+  frpl('upcore/upc.cmd', '^(set mysql_port)=\d+(\r\n)', '$1='.$newport.'$2');
+}
+function upcfg() {
+  global $apache_dir, $php_dir, $mysql_dir, $httpd_conf, $vhosts_conf, $php_ini, $updir, $sysroot, $my_ini;
+  $str = rfile($php_ini);
+  $str = regrpl('[A-Z]:\\\\[^.*]+(\\\\memcached)', $updir.'$1', $str); 
+  $str = regrpl('[A-Z]:\\\\[^.*]+(\\\\temp)', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\\\\[^.*]+(\\\\PHP5)', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\\\\[^.*]+(\\\\Apache2\\\\logs)', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\\\\[^.*]+(\\\\sendmail\\\\)', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\\\\[^.*]+(\\\\xdebug)', $updir.'$1', $str);
+  wfile($php_ini, $str);
+  $str = rfile($vhosts_conf); 
+  $str = regrpl('(open_basedir ")[^;]+(\\\\htdocs[^;]+;)', '$1'.$updir.'$2', $str);
+  $str = regrpl('(open_basedir ")[^;]+(\\\\vhosts\\\\[^;]+;)', '$1'.$updir.'$2', $str);
+  $str = regrpl('([A-Z]:\\\\[^\\\\])[^;]+(\\\\memcached[^;]+;)', $updir.'$2', $str);
+  $str = regrpl('([A-Z]:\\\\[^\\\\])[^;]+(\\\\pmd[^;]+;)', $updir.'$2', $str);
+  $str = regrpl('([A-Z]:\\\\[^\\\\])[^;]+(\\\\temp[^;]+;)', $updir.'$2', $str);
+  $updir = rpl("\\", '/', $updir);
+  $str = regrpl('[A-Z]:\/[^.*]+(\/htdocs)', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\/[^.*]+(\/vhosts)', $updir.'$1', $str);
+  wfile($vhosts_conf, $str);
+  $str = rfile($httpd_conf);
+  $updir = rpl("\\", '/', $updir);
+  $str = regrpl('[A-Z]:\/[^.*]+(\/Apache2)', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\/[^.*]+(\/htdocs)', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\/[^.*]+(\/pmd")', $updir.'$1', $str);
+  $str = regrpl('[A-Z]:\/[^.*]+(\/PHP5\/)', $updir.'$1', $str);
+  wfile($httpd_conf, $str);
+}
+function apache_log_default() {
+  global $httpd_conf;
+  $str = rfile($httpd_conf);
+  $str = regrpl('\r\nLogFormat.*comonvhost\r\nCustomLog.*comonvhost\r\n', '', $str);
+  $str = regrpl('##(CustomLog.*common\r\n)', '$1', $str);
+  wfile($httpd_conf, $str);
+}
+function apache_log_pipe() {
+  global $httpd_conf;
+  $str = rfile($httpd_conf);
+  $str = regrpl('^([ ]*)(CustomLog.*common\r\n)', '$1##$2', $str);
+  $str = regrpl('\r\nLogFormat.*comonvhost\r\nCustomLog.*comonvhost\r\n', '', $str);
+  $str .= '
+LogFormat "%v %h %l %u %t \"%r\" %>s %b" comonvhost
+CustomLog "|bin/rotatelogs.exe logs/%Y-%m-%d_access_log 16M" comonvhost
+';
+  wfile($httpd_conf, $str);
+}
+function apache_log_dis() {
+  global $httpd_conf;
+  $str = rfile($httpd_conf);
+  $str = regrpl('\r\nLogFormat.*comonvhost\r\nCustomLog.*comonvhost\r\n', '', $str);
+  $str = regrpl('^[ ]*(CustomLog.*common\r\n)', '##$1', $str);
+  wfile($httpd_conf, $str);
+}
+function vProxy_add($hName, $hAlias, $hPass)
+{
+  global $httpd_conf, $vhosts_conf;
+  frpl($httpd_conf, '^#(Load.*proxy_mod.*\r\n)', '$1');
+  frpl($httpd_conf, '^#(Load.*proxy_http.*\r\n)', '$1');
+  if (!$hAlias) $hAlias = '';
+  $str = rfile($vhosts_conf);
+  $str.= '
+<VirtualHost *>
+    ServerName '.$hName.':'.env('apache_port').'
+    ServerAlias '.$hAlias.'
+    ProxyPass / http://'.$hPass.'/
+    ProxyPassReverse / http://'.$hPass.'/
+</VirtualHost>
+';
+  wfile($vhosts_conf, $str);
+}
+function vProxy_dis()
+{
+  global $httpd_conf, $vhosts_conf;
+  frpl($httpd_conf, '^(Load.*proxy_mod.*\r\n)', '#$1');
+  frpl($httpd_conf, '^(Load.*proxy_http.*\r\n)', '#$1');
+  $str = rfile($vhosts_conf);
+  $str = rpl("\r\n", "\n", $str);
+  $str = regrpl('\n?<VirtualHost \*>[^<]*ProxyPass [^<]*<\/VirtualHost>\n?', '', $str);
+  $str = rpl("\n", "\r\n", $str);
+  wfile($vhosts_conf, $str);
+}
+function vhost_add($hn, $htdocs, $port, $hAlias, $lt) {
+  global $vhosts_conf, $updir, $sysroot;
+  $htdocs = trim($htdocs);
+  $hn = trim($hn);
+  if (regrpl('[\d]+', '', $hn) === '') quit(' # 主机名不能为纯数字!', 1);
+  if ($tmp = regrpl('[a-z0-9\.-]+', '', $hn)) quit(' # 主机名含有非法字符 "'.$tmp.'"', 1);
+  if ($port < 1 || $port > 65535) exit;
+  $str = rfile($vhosts_conf);
+  if (strpos($str, 'ServerName '.$hn.':')) quit(' # 主机名已存在!', 1);  
+  if (!$hAlias) $hAlias = '';
+  if (!$htdocs) {
+    if (!file_exists('vhosts')) mkdir('vhosts');
+    $tmp = 'vhosts/'.$hn;
+    @mkdir($tmp);
+    $htdocs = $updir.'/'.$tmp;
+	$htdocs = rpl("\\", '/', $htdocs);
+    $vhDir = $updir.'\\vhosts\\'.$hn;
+    copy($updir.'/upcore/u.ph_', $updir.'/'.$tmp.'/u.php');
+    $vhDir_Cfg = '
+    <Directory "'.$htdocs.'">
+		Options FollowSymLinks
+    </Directory>';
+  } else {
+    $tmp = getcwd();
+    chdir($htdocs);
+    $vhDir = getcwd();
+    chdir($tmp);
+    $htdocs = rpl("\\", '/', $vhDir);
+    if (!file_exists($htdocs.'/u.php'))
+      copy($updir.'/upcore/u.ph_', $htdocs.'/u.php');
+    $vhDir_Cfg = '
+    <Directory "'.$htdocs.'">
+		Options FollowSymLinks
+		AllowOverride All
+		Require all granted
+    </Directory>';
+  }
+  $o_bdir = '';
+  if (!($lt=='n' || $lt=='N'))
+    $o_bdir = "\r\n".'    php_admin_value open_basedir "'.$vhDir.'\;'.$updir.'\memcached\;'.$updir.'\pmd\;'.$updir.'\temp\;"';
+  $str .= '
+<VirtualHost *>'.$vhDir_Cfg.'
+    ServerAdmin webmaster@'.$hn.'
+    DocumentRoot "'.$htdocs.'"
+    ServerName '.$hn.':'.$port.'
+    ServerAlias '.$hAlias.'
+    CustomLog logs/'.$hn.'-access.log comonvhost
+    ErrorLog logs/'.$hn.'-error.log'.$o_bdir.'
+</VirtualHost>
+';
+  wfile($vhosts_conf, $str);
+}
+function vhost_mod($vh, $n_hA) {
+  global $httpd_conf, $vhosts_conf;
+  $str = rfile($vhosts_conf);
+  $Vhs = rvhs($str);
+  if (regrpl('[0-9]+', '', $vh) === '') {
+    $n = $vh;
+    if (!isset($Vhs[$n])) quit(' # 找不到序号为 '.$n.' 的虚拟主机!', 1);
+    $vh = cuts($Vhs[$n], 'ServerName ', ':');
+  } else {
+    foreach ($Vhs as $i => $tmp)
+      if (strpos($tmp, 'ServerName '.$vh.':'))
+        $n = $i;
+    if (!isset($n)) quit(' # 找不到名为 "'.$vh.'" 的虚拟主机!', 1);
+  }
+  $n_hA = trim($n_hA);
+  if ($n_hA) {
+    $hA = cuts($Vhs[$n], 'ServerAlias ', "\n");
+    if (substr_count($n_hA, '+'))
+      $n_hA = rpl('+', ' '.$hA.' ', $n_hA);
+    $n_hA = trim(regrpl('[ \t]+', ' ', $n_hA));
+    $str = regrpl('(ServerName '.$vh.'.*\r\n.*ServerAlias)[ \t]+'.quotemeta($hA)."(\r\n)", '$1 '.$n_hA.'$2', $str);
+  }
+  wfile($vhosts_conf, $str);
+}
+function vhost_del($vh) {
+  global $vhosts_conf;
+  $str = rfile($vhosts_conf);
+  $Vhs = rvhs($str);
+  if (regrpl('[0-9]+', '', $vh) === '') {
+    $n = $vh;
+    if (!isset($Vhs[$n])) quit(' # 找不到序号为 '.$n.' 的虚拟主机!', 1);
+    $vh = cuts($Vhs[$n], 'ServerName ', ':');
+  } else {
+    foreach ($Vhs as $i => $tmp)
+      if (strpos($tmp, 'ServerName '.$vh.':'))
+        $n = $i;
+    if (!isset($n)) quit(' # 找不到名为 "'.$vh.'" 的虚拟主机!', 1);
+  }
+  if ($vh == 'localhost')
+    quit(' # 默认主机不可删除!', 1);
+  $vhDir = cuts($Vhs[$n], 'DocumentRoot "', '"');
+  $vhDir = rpl('/', '\/', $vhDir);
+  $str = rpl("\r\n", "\n", $str);
+  $str = regrpl('<(\/?Directory[^>]*)>', '[$1]', $str);
+  $str = regrpl('\n?<VirtualHost[^<]+ServerName[ \t]+'.$vh.':[^<]+<\/VirtualHost>\n?', '', $str);
+  $str = regrpl('\[(\/?Directory[^\]]*)\]', '<$1>', $str);
+  $str = rpl("\n", "\r\n", $str);
+  wfile($vhosts_conf, $str);
+  quit(' # 虚拟主机 "'.$vh.'" 已删除!', 0);
+}
+function showvhs() {
+  global $vhosts_conf;
+  $Vhs = rvhs(rfile($vhosts_conf));
+  $str = '';
+  for ($i=0; $i<count($Vhs); $i++) {
+    $vh = str_pad(cuts($Vhs[$i], 'ServerName ', ':'), 18).'| ';
+    $vh .= cuts($Vhs[$i], 'ServerAlias ', "\n");
+    $P = cuts($Vhs[$i], 'DocumentRoot "', "\"\n");
+    if (!$P) {
+      $P = cuts($Vhs[$i], 'ProxyPass / http://', "/\n");
+      if ($P) $P = '~'.$P;
+    }
+    else {
+	  $P = regrpl('[A-Z]:\/[^.*]+(htdocs)', '$1', $P);
+	  $P = regrpl('[A-Z]:\/[^.*]+(vhosts)', '$1', $P);
+    }
+    if ($P) $vh = str_pad($vh, 42).' | '.@str_pad($P, '0', 20);
+    $vh = str_pad($vh, (strlen($vh) < 71) ? 70 : 150).'|';
+    $str .= ' |'.str_pad($i, 3, ' ', STR_PAD_LEFT).' | '.$vh."\r\n";
+  }
+  echo ' '.str_repeat('-', 78)."\r\n";
+  echo ' | No.| ServerName 主域名 | ServerAlias 额外域名   | 主机目录 / ~代理目标     |'."\r\n";
+  echo ' '.str_repeat('-', 78)."\r\n";
+  echo $str;
+  echo ' '.str_repeat('-', 78);
+  echo "\r\n";
+}
+function rvhs($str) {
+  $Vhs = array();
+  $str = regrpl('\s*\n\s*', "\n", $str);
+  $str = regrpl('[ \t]+', ' ', $str);
+  for ($i=0; $str=strstr($str, "\n<Vir"); $i++) {
+    $p = strpos($str, "\n</Vir") + 14;
+    $Vhs[$i] = substr($str, 1, $p);
+    $str = substr($str, $p);
+  }
+  return $Vhs;
+}
+function cuts($str, $a, $z) {
+  $p0 = strpos($str, $a);
+  if ($p0 === FALSE) return $p0;
+  $p1 = strlen($a) + $p0;
+  $p2 = strpos($str, $z, $p1);
+  return substr($str, $p1, $p2 - $p1);
+}
+function chk_mysql($port, $pwd) {
+  dl('php_mysql.dll');
+  for($n=0; $n<3; $n++) {
+    $link = @mysql_connect('localhost:'.$port, 'root', $pwd);
+    if ($link) {
+      mysql_close($link);
+      exit();
+    }
+    $errno = mysql_errno();
+    if ($errno === 1045) exit($errno);
+    echo ' # 尝试连接数据库, 请稍等...'."\r\n";
+    sleep(2);
+  }
+  exit($errno);
+}
+function cfg_bak($Arg) {
+  global $httpd_conf, $vhosts_conf, $php_ini;
+
+  $Arg = explode(' ', $Arg);
+  $Files = array(
+    $httpd_conf,
+    $vhosts_conf,
+    $php_ini,
+    env('mysql_dir').'/my.ini'
+	);
+  $zipfile = env('cfg_bak_zip');
+  $zip = new ZipArchive;
+  $zip->open($zipfile, ZIPARCHIVE::CREATE);
+  if (!$zip->locateName($tmp = 'UPUPW_Config_Backup'))
+  $zip->addFromString($tmp, '');
+  $Entries = array();
+  for ($i=0; $i<$zip->numFiles; $i++)
+    $Entries[$i] = $zip->getNameIndex($i);
+  $BakDirs = array();
+  foreach ($Entries As $e) {
+    if ($p = strpos($e, '/')) {
+      $bakDir = substr($e, 0, $p);
+      if (!in_array($bakDir, $BakDirs))
+        array_push($BakDirs, $bakDir);
+    }
+  }
+  if ($Arg[0] === 'backup') {
+    $bakDir = $Arg[1].'_'.gmdate('YmdHi', strtotime('+8 hour'));
+    $tmp = $bakDir;
+    for ($i=1; in_array($tmp.'/', $BakDirs); $i++)
+    $tmp = $bakDir.'_'.$i;
+    $bakDir = $tmp;
+    foreach ($Files as $fn) {
+      if (file_exists($fn))
+        $zip->addFile($fn, $bakDir.'/'.basename($fn));
+    }
+    echo "\r\n配置已备份到 ".$zipfile." -> ".$bakDir."\r\n";
+  }
+  if ($Arg[0] === 'restore') {
+    $n = $Arg[1];
+    if (isset($BakDirs[$n])) {
+      $bakDir = $BakDirs[$n];
+      foreach ($Files as $fn) {
+        $c = $zip->getFromName($bakDir.'/'.basename($fn));
+        if ($c) wfile($fn, $c);
+      }
+    } else {
+      quit(" 未找到序号为 ".$n." 的备份\r\n", 1);
+    }
+  }
+  if ($Arg[0] === 'show') {
+    if (count($BakDirs)) {
+      foreach ($BakDirs as $n => $bakDir) {
+        echo '  '.$n.' - '.$bakDir."\r\n";
+      }
+    } else {
+      echo "\r\n  ** 备份文件夹为空 ** \r\n";
+    }
+  }
+  if ($Arg[0] === 'delete') {
+    $n = $Arg[1];
+    if (isset($BakDirs[$n])) {
+      $bakDir = $BakDirs[$n];
+      foreach ($Entries As $e) {
+        if (substr($e, 0, strlen($bakDir)) === $bakDir)
+        $zip->deleteName($e);
+      }
+      quit(' 备份 '.substr($bakDir, 0, -1).' 已删除', 0);
+    } else {
+      quit(' 删除失败! 未找到序号为 '.$n.' 的备份', 1);
+    }
+  }
+  $zip->close();
+}
+function cfg_xnsp($Arg) {
+  global $my_ini, $php_ini;
+  $Arg = explode(' ', $Arg);
+  $Files = array(
+  $my_ini,
+  $php_ini,
+	);
+  $zipfile = env('cfg_xnsp_zip');
+  $zip = new ZipArchive;
+  $zip->open($zipfile, ZIPARCHIVE::CREATE);
+  if (!$zip->locateName($tmp = 'UPUPW_Config_XNSP'))
+  $zip->addFromString($tmp, '');
+  $Entries = array();
+  for ($i=0; $i<$zip->numFiles; $i++)
+  $Entries[$i] = $zip->getNameIndex($i);
+  $BakDirs = array();
+  foreach ($Entries As $e) {
+    if ($p = strpos($e, '/')) {
+      $bakDir = substr($e, 0, $p);
+      if (!in_array($bakDir, $BakDirs))
+        array_push($BakDirs, $bakDir);
+    }
+  }
+  if ($Arg[0] === 'restore') {
+    $n = $Arg[1];
+    if (isset($BakDirs[$n])) {
+      $bakDir = $BakDirs[$n];
+      foreach ($Files as $fn) {
+        $c = $zip->getFromName($bakDir.'/'.basename($fn));
+        if ($c) wfile($fn, $c);
+      }
+    } else {
+      quit(" 未找到序号为 ".$n." 的适配文件\r\n", 1);
+    }
+  }
+  if ($Arg[0] === 'show') {
+    if (count($BakDirs)) {
+      foreach ($BakDirs as $n => $bakDir) {
+        echo '  '.$n.' - '.$bakDir."\r\n";
+      }
+    } else {
+      echo "\r\n  ** 主机性能适配文件为空 **\r\n";
+    }
+  }
+  $zip->close();
+}
+function cfg_sckf($Arg) {
+  global $php_ini;
+  $Arg = explode(' ', $Arg);
+  $Files = array(
+    $php_ini,
+	);
+  $zipfile = env('cfg_sckf_zip');
+  $zip = new ZipArchive;
+  $zip->open($zipfile, ZIPARCHIVE::CREATE);
+  if (!$zip->locateName($tmp = 'UPUPW_Config_SCKF'))
+  $zip->addFromString($tmp, '');
+  $Entries = array();
+  for ($i=0; $i<$zip->numFiles; $i++)
+  $Entries[$i] = $zip->getNameIndex($i);
+  $BakDirs = array();
+  foreach ($Entries As $e) {
+    if ($p = strpos($e, '/')) {
+      $bakDir = substr($e, 0, $p);
+      if (!in_array($bakDir, $BakDirs))
+        array_push($BakDirs, $bakDir);
+    }
+  }
+  if ($Arg[0] === 'restore') {
+    $n = $Arg[1];
+    if (isset($BakDirs[$n])) {
+      $bakDir = $BakDirs[$n];
+      foreach ($Files as $fn) {
+        $c = $zip->getFromName($bakDir.'/'.basename($fn));
+        if ($c) wfile($fn, $c);
+      }
+    } else {
+      quit(" 未找到序号为 ".$n." 的配置文件\r\n", 1);
+    }
+  }
+  if ($Arg[0] === 'show') {
+    if (count($BakDirs)) {
+      foreach ($BakDirs as $n => $bakDir) {
+        echo '  '.$n.' - '.$bakDir."\r\n";
+      }
+    } else {
+      echo "\r\n  ** 生产开发配置文件为空 **\r\n";
+    }
+  }
+
+  $zip->close();
+}
+?>

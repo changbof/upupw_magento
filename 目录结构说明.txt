@@ -1,0 +1,17 @@
+UPUPW MAGENTO PHP套件目录说明：
+
+01、UPUPW.exe       UPUPW控制面板主程序
+02、Apache2         Apache web服务器软件目录
+02、Backup          UPUPW配置备份及出厂配置目录
+03、FileZillaftp    FileZilla server ftp程序目录
+04、htdocs          UPUPW默认MAGENTO网站目录，UPUPW迁移时无需修改配置路径，面板s1开启即可运行
+07、memcached       memcache服务端主程序目录
+08、MariaDB         MariaDB数据库程序目录
+09、PHP5            PHP5.4.26版目录
+10、pmd             phpmyadmin数据库管理软件目录，已配置别名解析
+11、sendmail        sendmail邮件服务程序目录
+12、temp            temp目录为session文件存储、临时上传文件、数据缓存目录
+13、upcore          upcore为UPUPW程序的附属目录
+14、vhosts          vhosts为虚拟主机默认存储目录，建立在此目录的网站文件夹在UPUPW迁移时无需再修改虚拟主机路径，UPUPW面板s1开启即可运行
+15、xdebug          xdebug文件夹为xdebug调试程序输出文件目录
+16、必装运行库      此文件夹为运行UPUPW所需的全部运行库文件，如果你电脑中没有对应的运行库，请开启UPUPW前安装

@@ -1,0 +1,18 @@
+{* This is a comment block
+
+Available vars in this template:
+  - $userName           User name
+  - $applicationName    Application name
+  - $status             Token new status
+
+Use vars: {{var var_name}}
+*}<!--@subject {{var name}} 欢迎光临 @-->
+<!--@vars
+{"htmlescape var=$userName":"User name",
+"var $applicationName":"Application name",
+"var $status":"Token new status"}
+@-->
+
+{{htmlescape var=$userName}} 您好， <br /><br />
+您在 <b>{{htmlescape var=$applicationName}}</b> 的许可证管理团队已经修改为
+<b>{{htmlescape var=$status}}</b><br /><br />

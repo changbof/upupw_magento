@@ -1,0 +1,5 @@
+运行库说明：
+
+1、Visual C++ 2008 SP1    PHP5.4.X采用VC9编译版本，需要此库的支持才能运行。
+2、附带增强工具需.NET运行库的支持才能运行
+   下载请到 http://www.upupw.net/website/n5.html（32位） http://www.upupw.net/website/n21.html（64位）
